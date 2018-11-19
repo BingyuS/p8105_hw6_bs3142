@@ -1,0 +1,22 @@
+---
+title: "p8105_hw6_bs3142"
+author: "Bingyu Sun"
+date: "11/19/2018"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%"
+)
+
+library(tidyverse)
+
+theme_set(theme_bw() + theme(legend.position = "bottom"))
+```
+
