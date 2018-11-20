@@ -72,7 +72,8 @@ tidy = function(df) {
   broom::tidy(df, conf.int = TRUE)
 }
 
-homicides_data %>%
+homicides_statistics =
+  homicides_data %>%
   group_by(city_state) %>%
   nest() %>% 
   mutate(
@@ -89,8 +90,15 @@ homicides_data %>%
 **4. Create a plot that shows the estimated ORs and CIs for each city. Organize cities according to estimated OR, and comment on the plot.**
 
 ```{r}
-
+homicides_statistics %>%
+  mutate(city_state = fct_reorder(city_state, log_OR)) %>%
+  ggplot(aes(x = city_state, y = log_OR)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
+
+**Comment:**
 
 ## Problem 2
 
