@@ -29,22 +29,29 @@ theme_set(theme_bw() + theme(legend.position = "bottom"))
 ```{r}
 homicides_data =
   read_csv("./data/homicide-data.csv", na = c("", "NA", "Unknown")) %>%
-  mutate(
-    city_state = str_c(city, state, sep = ", "),
-    resolution = case_when(
-      disposition == "Closed without arrest" ~ "unsolved",
-      disposition == "Open/No arrest"        ~ "unsolved",
-      disposition == "Closed by arrest"      ~ "solved"
-      )
-  ) %>%
-  filter(
-    !(city_state %in% c("Dallas, TX", "Phoenix, AZ", "Kansas City, MO", "Tulsa, AL"))) %>%
   na.omit() %>%
+  mutate(city_state = str_c(city, state, sep = ", ")) %>%
+  filter(!(city_state %in% c("Dallas, TX", "Phoenix, AZ", "Kansas City, MO", "Tulsa, AL"))) %>%
   mutate(
-    binary_resolution = as.numeric(disposition == "Closed by arrest"),
+    resolved = as.numeric(disposition == "Closed by arrest"),
     victim_age = as.numeric(victim_age),
     victim_race = ifelse(victim_race == "White", "white", "non-white"),
     victim_race = fct_relevel(victim_race, "white")
   )
+```
+
+### Q & A
+
+**1. For the city of Baltimore, MD, use the glm function to fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race (as just defined) as predictors. Save the output of glm as an R object; apply the broom::tidy to this object.**
+
+```{r}
+fit_logistic_baltimore =
+  homicides_data %>%
+  filter(city_state == "Baltimore, MD") %>%
+  select(resolved, victim_age, victim_sex, victim_race) %>%
+  glm(resolved ~ victim_age + victim_sex + victim_race, data = ., family = binomial()) 
+
+fit_logistic_baltimore %>%
+  broom::tidy()
 ```
 
