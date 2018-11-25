@@ -82,8 +82,10 @@ homicides_statistics =
     ) %>%
   select(-data) %>%
   unnest() %>%
-  mutate(OR = exp(estimate)) %>%
-  select(city_state, term, OR, log_OR = estimate, starts_with("conf")) %>%
+  mutate(OR = exp(estimate),
+         conf.low = exp(conf.low),
+         conf.high = exp(conf.high)) %>%
+  select(city_state, term, OR, starts_with("conf")) %>%
   filter(term == "victim_racenon-white")
 ```
 
@@ -91,8 +93,8 @@ homicides_statistics =
 
 ```{r}
 homicides_statistics %>%
-  mutate(city_state = fct_reorder(city_state, log_OR)) %>%
-  ggplot(aes(x = city_state, y = log_OR)) +
+  mutate(city_state = fct_reorder(city_state, OR)) %>%
+  ggplot(aes(x = city_state, y = OR)) +
   geom_point() +
   geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) + 
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
@@ -102,12 +104,30 @@ homicides_statistics %>%
 
 ## Problem 2
 
-### Data Import
+### Data Import & Cleaning
 
 * **Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for missing data, etc.).**
 
 ```{r}
 birthweight_data =
-  read_csv("./data/birthweight.csv")
+  read_csv("./data/birthweight.csv", col_types = "dddddddddddddddddddd") %>%
+  mutate(babysex = as.factor(babysex),
+         frace = as.factor(frace),
+         malform = as.factor(malform),
+         mrace = as.factor(mrace))
+
+str(birthweight_data)
+skimr::skim(birthweight_data)
+```
+
+**Comment:**
+There is no missing value in the dataset.
+
+### Q & A
+
+**1. Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.**
+
+```{r}
+
 ```
 
