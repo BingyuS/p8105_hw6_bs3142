@@ -191,3 +191,13 @@ birthweight_clean %>%
   geom_point(alpha = 0.25)
 ```
 
+**2. Compare your model to two others: One using length at birth and gestational age as predictors (main effects only), One using head circumference, length, sex, and all interactions (including the three-way interaction) between these. Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.**
+
+**Get the two models**
+
+```{r}
+model_1 = lm(bwt~blength + gaweeks, data = birthweight_data)
+
+model_2 = lm(bwt~bhead * blength * babysex, data = birthweight_data)
+```
+
