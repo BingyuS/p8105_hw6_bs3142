@@ -29,81 +29,95 @@ theme_set(theme_bw() + theme(legend.position = "bottom"))
 
 * **Create a city_state variable (e.g. “Baltimore, MD”), and a binary variable indicating whether the homicide is solved. Omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO – these don’t report victim race. Also omit Tulsa, AL – this is a data entry mistake. Modifiy victim_race to have categories white and non-white, with white as the reference category. Be sure that victim_age is numeric.**
 
-```{r}
+```{r homicides_data_cleaning}
 homicides_data =
   read_csv("./data/homicide-data.csv", na = c("", "NA", "Unknown")) %>%
-  na.omit() %>%
-  mutate(city_state = str_c(city, state, sep = ", ")) %>%
-  filter(!(city_state %in% c("Dallas, TX", "Phoenix, AZ", "Kansas City, MO", "Tulsa, AL"))) %>%
+  na.omit() %>% #filter out NAs
+  mutate(city_state = str_c(city, state, sep = ", ")) %>% #add a new column
+  filter(!city_state %in% c("Dallas, TX", "Phoenix, AZ", "Kansas City, MO", "Tulsa, AL")) %>% #filter out some cities
   mutate(
     resolved = as.numeric(disposition == "Closed by arrest"),
     victim_age = as.numeric(victim_age),
     victim_race = ifelse(victim_race == "White", "white", "non-white"),
     victim_race = fct_relevel(victim_race, "white")
-  )
+  ) #redefine some variables
 ```
 
 ### Q & A
 
 **1. For the city of Baltimore, MD, use the glm function to fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race (as just defined) as predictors. Save the output of glm as an R object; apply the broom::tidy to this object.**
 
-```{r}
+```{r, stats_baltimore_1}
 fit_logistic_baltimore =
   homicides_data %>%
   filter(city_state == "Baltimore, MD") %>%
   select(resolved, victim_age, victim_sex, victim_race) %>%
-  glm(resolved ~ victim_age + victim_sex + victim_race, data = ., family = binomial()) 
+  glm(resolved ~ victim_age + victim_sex + victim_race, data = ., family = binomial()) #get regression object
 
 fit_logistic_baltimore %>%
-  broom::tidy()
+  broom::tidy() %>% #get log odds ratio
+  knitr::kable(digits = 3)
 ```
 
 **2. Obtain the estimate and confidence interval of the adjusted odds ratio for solving homicides comparing non-white victims to white victims keeping all other variables fixed.**
 
-```{r}
+```{r, stats_baltimore_2}
 fit_logistic_baltimore %>%
-  broom::tidy(conf.int = TRUE) %>%
-  mutate(OR = exp(estimate)) %>%
-  select(term, OR, log_OR = estimate, starts_with("conf")) %>%
-  filter(term == "victim_racenon-white")
+  broom::tidy(conf.int = TRUE) %>% #get CI
+  mutate(OR = exp(estimate),
+         conf.low = exp(conf.low),
+         conf.high = exp(conf.high)) %>% #transform to orginal scale
+  select(term, log_OR = estimate, OR, starts_with("conf")) %>%
+  filter(term == "victim_racenon-white") %>%
+  knitr::kable(digits = 3)
 ```
+
+**Comment:**
+
+In baltimore, the odds of resolving cases for non-white people is 0.441 as likely as compares to white people adjusting for age and sex. At alpha = 0.05, we are 95% confident that the true odds ratio of resolving cases for non-white people is between 0.312 and 0.620.
+
 
 **3. Now run glm for each of the cities in your dataset, and extract the adjusted odds ratio (and CI) for solving homicides comparing non-white victims to white victims. Do this within a “tidy” pipeline, making use of purrr::map, list columns, and unnest as necessary to create a dataframe with estimated ORs and CIs for each city.**
 
-```{r}
+```{r, stats_homicides}
 tidy = function(df) {
   broom::tidy(df, conf.int = TRUE)
-}
+} #get summary with CI
 
 homicides_statistics =
   homicides_data %>%
   group_by(city_state) %>%
-  nest() %>% 
+  nest() %>% #nest by city_state
   mutate(
     fit_model = map(.x = data, ~glm(resolved ~ victim_age + victim_sex + victim_race, data = .x, family = binomial())),
     fit_model = map(fit_model, tidy)
-    ) %>%
+    ) %>% #fit model for each city
   select(-data) %>%
   unnest() %>%
+  filter(term == "victim_racenon-white") %>% #get term of interest
   mutate(OR = exp(estimate),
          conf.low = exp(conf.low),
-         conf.high = exp(conf.high)) %>%
-  select(city_state, term, OR, starts_with("conf")) %>%
-  filter(term == "victim_racenon-white")
+         conf.high = exp(conf.high)) %>% #transform to original scale
+  select(city_state, term, OR, starts_with("conf")) %>% #select variables of interest
+  mutate(term = str_replace(term, "victim_race", "victim race: ")) #formatting
 ```
 
 **4. Create a plot that shows the estimated ORs and CIs for each city. Organize cities according to estimated OR, and comment on the plot.**
 
-```{r}
+```{r, homicides_scatterplot}
 homicides_statistics %>%
-  mutate(city_state = fct_reorder(city_state, OR)) %>%
+  mutate(city_state = fct_reorder(city_state, OR)) %>% #order by OR
   ggplot(aes(x = city_state, y = OR)) +
   geom_point() +
   geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) + 
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  labs(title = "Estimated Odds Ratios of resolving homicides by race for Each City") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) #scatterplot with error bar
 ```
 
 **Comment:**
+
+The majority of cities in U.S. demonstate a better odds of solving cases in white victims than non-white victims. In general, the estimated odds ratios of resolving cases in non-white victims compares to white victims have wide confidence interval.
+
 
 ## Problem 2
 
