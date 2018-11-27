@@ -18,7 +18,6 @@ knitr::opts_chunk$set(
 library(tidyverse)
 library(modelr)
 library(mgcv)
-library(leaps)
 
 theme_set(theme_bw() + theme(legend.position = "bottom"))
 ```
@@ -51,7 +50,6 @@ homicides_data =
 fit_logistic_baltimore =
   homicides_data %>%
   filter(city_state == "Baltimore, MD") %>%
-  select(resolved, victim_age, victim_sex, victim_race) %>%
   glm(resolved ~ victim_age + victim_sex + victim_race, data = ., family = binomial()) #get regression object
 
 fit_logistic_baltimore %>%
@@ -125,112 +123,129 @@ The majority of cities in U.S. demonstate a better odds of solving cases in whit
 
 * **Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for missing data, etc.).**
 
-```{r}
-birthweight_data =
+```{r, bwt_cleaning}
+bwt_data =
   read_csv("./data/birthweight.csv", col_types = "dddddddddddddddddddd") %>%
   mutate(babysex = as.factor(babysex),
          frace = as.factor(frace),
          malform = as.factor(malform),
-         mrace = as.factor(mrace))
+         mrace = as.factor(mrace),
+         bwt = bwt * 0.0022) %>% #gram to pound
+  select(bwt, everything(), -pnumlbw, -pnumsga)
 
-str(birthweight_data)
-skimr::skim(birthweight_data)
+str(bwt_data)
+skimr::skim(bwt_data)
 ```
 
 **Comment:**
-There is no missing value in the dataset.
+There are 4342 rows by 20 columns with no missing value in the dataset. Each row represents a baby's information. Previous number of low birth weight babies (pnumlbw) and number of prior small for gestational age babies (pnumgsa) are removed from the data because they only consist of zeros.
+
 
 ### Q & A
 
-**1. Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.**
+**1. Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process.**
 
-**Look at the data:**
+**Look at the data**
 
 ```{r}
-birthweight_data %>%
-  select(-babysex, -frace, -malform, -mrace, -pnumlbw, -pnumsga) %>%
-  cor()
+bwt_data %>%
+  select(-babysex, -frace, -malform, -mrace) %>%
+  cor() #check correlation
 ```
 
 * Baby's head circumference at birth (bhead), baby's length at birth (blength), and baby's birth weight (bwt) are highly correlated (>0.7).
 
 * Mother's pre-pregnancy BMI (ppbmi), mother's pre-pregnancy weight (ppwt), and mother's weight at delivery (delwt) are highly correlated (>0.7).
 
-```{r}
-birthweight_clean =
-  birthweight_data %>%
-  select(-blength, -ppbmi, -ppwt, -pnumlbw, -pnumsga) %>%
-  select(bwt, everything())
-```
 
-**Look at outcome distribution**
+**Look at the outcome distribution**
 
 ```{r}
-birthweight_clean %>%
+bwt_data %>%
   select(bwt) %>%
   ggplot(aes(y = bwt)) + geom_boxplot()
 
-birthweight_clean %>%
+bwt_data %>%
   select(bwt) %>%
   ggplot(aes(x = bwt)) + geom_histogram()
 ```
 
-**Use stepwise approach to get some models**
+* Birthweight has approximately normal distribution.
+
+**Use stepwise approach to get the model**
 
 ```{r}
-fit_all = lm(bwt ~ ., data = birthweight_clean)
+fit_all = lm(bwt ~ ., data = bwt_data)
 
-step(fit_all, direction = 'backward')
+step(fit_all, direction = 'backward') #stepwise approach
 ```
 
-The stepwise approach suggests babysex, bhead, delwt, gaweeks, menarche, mheight, mrace, parity, smoken, and wtgain.
+The stepwise approach suggests babysex, bhead, blength, delwt, fincome, gaweeks, mheight, mrace, parity, ppwt, and smoken.
 
-**Check Cp**
+**My model**
 
 ```{r}
-covariates_fit = data.frame(birthweight_clean)
+best_fit_bwt = lm(bwt~babysex + bhead + blength + delwt + fincome + gaweeks + mheight + mrace + parity + ppwt + smoken, data = bwt_data)
 
-#leaps(x = covariates_fit[,2:14], y = covariates_fit[,1], nbest=1, method="Cp") 
+HH::vif(best_fit_bwt) #check colinearity btw predictors
+
+summary(best_fit_bwt) #get summary statistics
 ```
 
-**Model**
+* The model suggested by stepwise approach has adjusted R-squared of 0.72, and there is no significant colineraity between predictors.
+
+**Assumptions check**
 
 ```{r}
-best_fit_brithweight = lm(bwt~babysex + delwt + gaweeks + mrace + parity + smoken + mheight + wtgain + bhead + menarche, data = birthweight_clean)
+par(mfrow = c(2, 2))
+plot(best_fit_bwt) #assumptions check
+```
 
-birthweight_clean %>% 
-  modelr::add_residuals(best_fit_brithweight) %>%
-  modelr::add_predictions(best_fit_brithweight) %>%
+* The assumptions of normality and constant variance hold.
+
+**2. Show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.**
+
+```{r}
+bwt_data %>% 
+  modelr::add_residuals(best_fit_bwt) %>%
+  modelr::add_predictions(best_fit_bwt) %>%
   ggplot(aes(x = pred, y = resid)) +
-  geom_point(alpha = 0.25)
+  geom_point(alpha = 0.25) +
+  labs(title = "Residuals vs. Fitted") #scatterplot
 ```
 
-**2. Compare your model to two others: One using length at birth and gestational age as predictors (main effects only), One using head circumference, length, sex, and all interactions (including the three-way interaction) between these. Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.**
+
+**3. Compare your model to two others: One using length at birth and gestational age as predictors (main effects only), One using head circumference, length, sex, and all interactions (including the three-way interaction) between these. Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.**
 
 **Get the two models**
 
 ```{r}
-model_1 = lm(bwt~blength + gaweeks, data = birthweight_data)
+model_1 = lm(bwt ~ blength + gaweeks, data = bwt_data)
 
-model_2 = lm(bwt~bhead * blength * babysex, data = birthweight_data)
+model_2 = lm(bwt ~ bhead * blength * babysex, data = bwt_data)
+
+summary(model_1)
+summary(model_2)
 ```
 
 **Cross Validation**
 
 ```{r}
+set.seed(1) #ensure to get the same 100 sets each time
+
 cv_bwt = 
-  crossv_mc(birthweight_data, 100)
+  crossv_mc(bwt_data, 100) #generate 100 training and testing datasets
 
 cv_3_models =
   cv_bwt %>%
-  mutate(my_model = map(train, ~lm(bwt~babysex + delwt + gaweeks + mrace + parity + smoken + mheight + wtgain + bhead + menarche, data = .x)),
+  mutate(my_model = map(train, ~lm(bwt~babysex + bhead + blength + delwt + fincome + gaweeks + mheight + mrace + parity + ppwt + smoken, data = .x)),
          a_model = map(train, ~lm(bwt~blength + gaweeks, data = .x)),
          b_model = map(train, ~lm(bwt~bhead * blength * babysex, data = .x))
          ) %>%
   mutate(rmse_my = map2_dbl(my_model, test, ~rmse(model = .x, data = .y)),
          rmse_a = map2_dbl(a_model, test, ~rmse(model = .x, data = .y)),
          rmse_b = map2_dbl(b_model, test, ~rmse(model = .x, data = .y))
-         )
+         ) #get testing rmse
 ```
 
 **Plot the distribution of RMSE values for each model.**
@@ -242,6 +257,10 @@ cv_3_models %>%
   mutate(model = str_replace(model, "rmse_", ""),
          model = fct_inorder(model)) %>%
   ggplot(aes(x = model, y = rmse)) +
-  geom_violin()
+  geom_violin() +
+  labs(title = "Distribution of RMSE") #violin plot
 ```
 
+**Comment:**
+
+The model suggested by stepwise approach hsa the lowest testing rmse, indicating it is the best model among the three.
